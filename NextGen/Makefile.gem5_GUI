@@ -1,0 +1,16 @@
+# export GEM5_HOME=`pwd`/gem5
+#
+# export m5_path=gem5_GUI/gem5/src/python/m5	# not necessary
+
+all:
+	@echo "Gem5 GUI - req run"
+	@echo "	export GEM5_HOME=`pwd`/../gem5"
+
+req:
+	pip3 install -r requirements.txt
+	# pip3 install pyside2
+	pip3 install pyqt5
+
+run:
+	@echo "	Requires export GEM5_HOME=`pwd`/../gem5"
+	../gem5/build/X86/gem5.opt gui.py

@@ -1,0 +1,82 @@
+#BASEDIR := $(HOME)/gem5-X-master/dist/splash2/codes
+
+M5DIR := $(BASEDIR)/m5threads
+
+ifndef ISA
+$(warning "Environment var ISA is not set: ISA=ARM or ISA=X86")
+ISA := X86
+$(warning "Default ISA: ISA=$(ISA)")
+endif
+
+ifdef ISA
+ifeq ($(ISA),X86)
+CROSS_COMPILE :=
+CFLAGS_X86 :=
+CFLAGS := $(CFLAGS_X86)
+LDFLAGS := -Wl,-Bstatic -L $(M5DIR) -l pthread.$(ISA)
+LDFLAGS := -pthread
+endif
+
+ifeq ($(ISA), ARM)
+CROSS_COMPILE := arm-linux-gnueabihf-
+CFLAGS_ARM :=  -march=armv7-a -marm 
+CFLAGS := $(CFLAGS_ARM)
+LDFLAGS := -Wl,-Bstatic -L $(M5DIR) -l pthread.$(ISA) 
+endif
+endif
+
+#### COMMON ENVIRONMENT VARS ####
+CC := $(CROSS_COMPILE)gcc
+CFLAGS := $(CFLAGS) -O3 -D_POSIX_C_SOURCE=200112 -static
+#CFLAGS := $(CFLAGS) -O3 -pthread -D_POSIX_C_SOURCE=200112 -static
+CFLAGS := $(CFLAGS) -Wall -W -Wmissing-prototypes -Wmissing-declarations -Wredundant-decls -Wdisabled-optimization
+CFLAGS := $(CFLAGS) -Wpadded -Winline -Wpointer-arith -Wsign-compare -Wendif-labels
+LDFLAGS:= $(LDFLAGS) -lm 
+ARFLAGS := arU
+#LDFLAGS:= $(LDFLAGS) -lm 
+
+#MACROS := $(M5DIR)/null_macros/c.m4.null # uniprocessor version
+#MACROS := $(M5DIR)/null_macros/c.m4.null.POSIX
+MACROS := $(BASEDIR)/null_macros/c.m4.null.POSIX_BARRIER
+M5THREAD_OBJ := $(M5DIR)/pthread.$(ISA).o
+$(warning "MACROS=$(MACROS)")
+#END OF ENV SETTING
+
+
+#$(warning "CC=$(CC)")
+#$(warning "CFLAGS=$(CFLAGS)")
+#$(warning "LDFLAGS=$(LDFLAGS)")
+
+M4 := m4 -s -Ulen -Uindex
+
+x = *
+
+$(TARGET): $(OBJS) $(M5THREAD_OBJ) 
+	$(CC) $(OBJS) $(CFLAGS) -o $(TARGET) $(LDFLAGS)
+	cp $(TARGET) $(TARGET).$(ISA); cp $(TARGET) $(BASEDIR)/bin/$(ISA)/
+
+clean:
+	$(RM) -rf *.c *.h *.o $(TARGET).* $(TARGET) 
+
+$(M5THREAD_OBJ):
+	cd $(M5DIR); make ISA=$(ISA)
+
+.SUFFIXES:
+.SUFFIXES:	.o .c .C .h .H
+
+.H.h:
+	$(M4) $(MACROS) $*.H > $*.h
+
+.C.c:
+	$(M4) $(MACROS) $*.C > $*.c
+
+.c.o:
+	$(CC) -c $(CFLAGS) $*.c
+
+.C.o:
+	$(M4) $(MACROS) $*.C > $*.c
+	$(CC) -c $(CFLAGS) $*.c
+
+$(SUBDIRS) : 
+	$(MAKE) -C $@ $(MAKECMDGOALS)
+

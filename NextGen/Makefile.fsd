@@ -1,0 +1,52 @@
+M5_PATH=/Data/Gem5-X
+FULL_SYSTEM_IMAGE_PATH=$(M5_PATH)/system
+# FULL_SYSTEM_IMAGE_PATH=/Home/wjkim/Proj/Memory_Solution/gem5-X/system
+CPUS=8
+CKPT=1
+OUTDIR=m5_DDR4_1Core
+
+
+fsd: 
+	export M5_PATH=$(M5_PATH)
+	./build/ARM/gem5.opt \
+		--outdir=$(OUTDIR) \
+		configs/example/fs.py \
+		--cpu-clock=1GHz \
+		-n $(CPUS) \
+		--kernel=vmlinux \
+		--machine-type=VExpress_GEM5_V1 \
+		--dtb-file=$(M5_PATH)/system/arm/dt/armv8_gem5_v1_$(CPUS)cpu.dtb \
+		--disk-image=$(M5_PATH)/disks/gem5_ubuntu16.img \
+		--caches \
+		--l2cache \
+		--l1i_size=32kB \
+		--l1d_size=32kB \
+		--l2_size=1MB \
+		--l2_assoc=2 \
+		--mem-type=DDR4_2400_4x16 \
+		--mem-ranks=4 \
+		--mem-size=4GB \
+		--sys-clock=1600MHz
+
+fsdc: 
+	export M5_PATH=$(M5_PATH)
+	./build/ARM/gem5.opt \
+		--outdir=$(OUTDIR) \
+		configs/example/fs.py \
+		--cpu-clock=1GHz \
+		-n $(CPUS) \
+		-r $(CKPT) \
+		--kernel=vmlinux \
+		--machine-type=VExpress_GEM5_V1 \
+		--dtb-file=$(M5_PATH)/system/arm/dt/armv8_gem5_v1_$(CPUS)cpu.dtb \
+		--disk-image=$(M5_PATH)/disks/gem5_ubuntu16.img \
+		--caches \
+		--l2cache \
+		--l1i_size=32kB \
+		--l1d_size=32kB \
+		--l2_size=1MB \
+		--l2_assoc=2 \
+		--mem-type=DDR4_2400_4x16 \
+		--mem-ranks=4 \
+		--mem-size=4GB \
+		--sys-clock=1600MHz

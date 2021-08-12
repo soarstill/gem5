@@ -1,0 +1,226 @@
+M5_PATH=/Data/Gem5-X
+# M5_PATH=/Data/Gem5/arm
+SCONS_CMD=scons
+# SCONS_CMD='python3 /Tools/scons/scripts/scons.py'	# for gem5 newer version >= 21.0
+#
+
+all:
+	@echo "Gem5-X: Gem5 Architecture eXtension"
+	@echo "Build: X86 ARM MIPS POWER"
+	@echo " Requires python3 >= 3.5 (recommend 3.7)"
+	@echo " Do export M5_PATH=$(M5_PATH) first for ARM full system"
+	@echo "	req:     Install required environemts"
+	@echo "	build:     Basic buid test"
+	@echo "	build-arm: Buid for ARM"
+	@echo "	build-x86: Buid for X86"
+	@echo "	x86_: Buid for X86"
+	@echo "	fs:     Run ARM Full System"
+	@echo "	fsd#:   Run ARM Full System with DDR4 using # cores (#: 1, 2, 4, 8)"
+	@echo "	fsh#:   Run ARM Full System with HBM2 using # cores (#: 1, 2, 4, 8)"
+	@echo "	fsdc#:  Run ARM Full System from CheckPoint with DDR4 using # cores"
+	@echo "	fshc#:  Run ARM Full System from CheckPoint with HBM2 using # cores"
+	@echo "	fsw:    Run ARM Full System using vmlinux_wa - not complete yet"
+
+req:
+	sudo apt install -y gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+	sudo apt install -y device-tree-compiler
+	sudo apt install -y build-essential git m4 scons zlib1g zlib1g-dev \
+		libprotobuf-dev protobuf-compiler libprotoc-dev \
+		libgoogle-perftools-dev python-dev python-six python \
+		libboost-all-dev swig
+
+#
+# Build Commands
+#
+build:
+	scons
+
+X86:
+	scons build/X86/gem5.opt -j8
+
+ARM:
+	scons build/ARM/gem5.opt -j8
+
+MIPS:
+	scons build/MIPS/gem5.opt -j8
+
+POWER:
+	scons build/POWER/gem5.opt -j8
+
+PROTOCOLS = Garnet_standalone MESI_Three_Level MESI_Two_Level MI_example MOESI_AMD_Base MOESI_CMP_directory MOESI_CMP_token MOESI_hammer
+
+blds-all: blds-X86 blds-ARM
+
+blds-X86:
+	@for PROT in $(PROTOCOLS); do \
+		scons PROTOCOL=$$PROT build/X86/gem5.opt -j8; \
+		cp build/X86/gem5.opt build/X86/gem5-$$PROT.opt; \
+	done
+
+blds-ARM:
+	@for PROT in $(PROTOCOLS); do \
+		scons PROTOCOL=$$PROT build/ARM/gem5.opt -j8; \
+		cp build/ARM/gem5.opt build/ARM/gem5-$$PROT.opt; \
+	done
+
+N_CPU=4
+
+CPT=2
+CPUS=1
+
+# ARM Full System with DDR4
+fs: 
+	./build/ARM/gem5.opt configs/example/fs.py \
+		--cpu-clock=1GHz \
+		-n $(CPUS) \
+		--kernel=vmlinux \
+		--machine-type=VExpress_GEM5_V1 \
+		--dtb-file=$(Mt_PATH)/system/arm/dt/armv8_gem5_v1_$(CPUS)cpu.dtb \
+		--disk-image=gem5_ubuntu16.img \
+		--caches \
+		--l2cache \
+		--l1i_size=32kB \
+		--l1d_size=32kB \
+		--l2_size=1MB \
+		--l2_assoc=2 \
+		--mem-type=DDR4_2400_4x16 \
+		--mem-ranks=4 \
+		--mem-size=4GB \
+		--sys-clock=1600MHz
+
+# ARM Full System with DDR4 using CheckPoint -r
+fsc: 
+	./build/ARM/gem5.opt configs/example/fs.py \
+		--cpu-clock=1GHz \
+		-n $(CPUS) \
+		-r ${CPT} \
+		--kernel=vmlinux \
+		--machine-type=VExpress_GEM5_V1 \
+		--dtb-file=$(Mt_PATH)/system/arm/dt/armv8_gem5_v1_$(CPUS)cpu.dtb \
+		--disk-image=gem5_ubuntu16.img \
+		--caches \
+		--l2cache \
+		--l1i_size=32kB \
+		--l1d_size=32kB \
+		--l2_size=1MB \
+		--l2_assoc=2 \
+		--mem-type=DDR4_2400_4x16 \
+		--mem-ranks=4 \
+		--mem-size=4GB \
+		--cpu-type=MinorCPU \
+		--sys-clock=1600MHz
+
+# ARM Full System with HGM2
+fsh: 
+	./build/ARM/gem5.opt configs/example/fs.py \
+		--cpu-clock=1GHz \
+		-n $(CPUS) \
+		--kernel=vmlinux \
+		--machine-type=VExpress_GEM5_V1 \
+		--dtb-file=$(Mt_PATH)/system/arm/dt/armv8_gem5_v1_$(CPUS)cpu.dtb \
+		--disk-image=gem5_ubuntu16.img \
+		--caches \
+		--l2cache \
+		--l1i_size=32kB \
+		--l1d_size=32kB \
+		--l2_size=1MB \
+		--l2_assoc=2 \
+		--l2bus-width=128 \
+		--membus-width=128 \
+		--mem-type=HBM2_2000_4H_1x128 \
+		--mem-ranks=1 \
+		--mem-channels=8 \
+		--mem-size=4GB \
+		--sys-clock=1600MHz
+
+
+fsd1: 
+	make -f Makefile.fsd CPUS=1 OUTDIR=m5_DDR4_1Core fsd
+
+fsd2: 
+	make -f Makefile.fsd CPUS=2 OUTDIR=m5_DDR4_2Core fsd
+
+fsd4: 
+	make -f Makefile.fsd CPUS=4 OUTDIR=m5_DDR4_4Core fsd
+
+fsd8: 
+	make -f Makefile.fsd CPUS=8 OUTDIR=m5_DDR4_8Core fsd
+
+fsdc1: 
+	make -f Makefile.fsd CPUS=1 OUTDIR=m5_DDR4_1Core fsdc
+
+fsdc2: 
+	make -f Makefile.fsd CPUS=2 OUTDIR=m5_DDR4_2Core fsdc
+
+fsdc4: 
+	make -f Makefile.fsd CPUS=4 OUTDIR=m5_DDR4_4Core fsdc
+
+fsdc8: 
+	make -f Makefile.fsd CPUS=8 OUTDIR=m5_DDR4_8Core fsdc
+
+fsh1: 
+	make -f Makefile.fsh CPUS=1 OUTDIR=m5_HBM2_1Core fsh
+
+fsh2: 
+	make -f Makefile.fsh CPUS=2 OUTDIR=m5_HBM2_2Core fsh
+
+fsh4: 
+	make -f Makefile.fsh CPUS=4 OUTDIR=m5_HBM2_4Core fsh
+
+fsh8: 
+	make -f Makefile.fsh CPUS=8 OUTDIR=m5_HBM2_8Core fsh
+
+fshc1: 
+	make -f Makefile.fshc CPUS=1 OUTDIR=m5_HBM2_1Core fshc
+
+fshc2: 
+	make -f Makefile.fshc CPUS=2 OUTDIR=m5_HBM2_2Core fshc
+
+fshc4: 
+	make -f Makefile.fshc CPUS=4 OUTDIR=m5_HBM2_4Core fshc
+
+fshc8: 
+	make -f Makefile.fshc CPUS=8 OUTDIR=m5_HBM2_8Core fshc
+
+fsh18_64: 
+	make -f Makefile.fsh CPUS=8 MEM_TYPE=HBM_1000_4H_1x64 hfsh
+	mv m5out m5_8Core_HBM1_64
+
+
+# Using 9P over Virtio
+fsw: 
+	./build/ARM/gem5.opt configs/example/fs.py \
+		--cpu-clock=1GHz \
+		-n $(CPUS) \
+		-r ${CPT} \
+		--kernel=vmlinux_wa \
+		--machine-type=VExpress_GEM5_V1 \
+		--dtb-file=$(M5_PATH)/system/arm/dt/armv8_gem5_v1_$(CPUS)cpu.dtb \
+		--disk-image=gem5_ubuntu16.img \
+		--caches \
+		--l2cache \
+		--l1i_size=32kB \
+		--l1d_size=32kB \
+		--l2_size=1MB \
+		--l2_assoc=2 \
+		--mem-type=DDR4_2400_4x16 \
+		--mem-ranks=4 \
+		--mem-size=4GB \
+		--sys-clock=1600MHz
+
+
+term: util/term/m5term
+	./util/term/m5term localhost 3456
+
+util/term/m5term:
+	cd util/term; make
+	
+mnt: imgdir
+	sudo mount -o loop,offset=1048576 $(M5_PATH)/disks/gem5_ubuntu16.img imgdir
+
+umnt:
+	sudo umount imgdir
+
+imgdir:
+	mkdir -p imgdir
+

@@ -1,0 +1,106 @@
+SPLASH2_HOME := "/Home2/hssong/tmp/splash2"
+GEM5_HOME := "/Home2/hssong/gem5-X-master"
+
+ifndef ISA
+ISA := X86
+endif
+
+all: help
+
+help:
+	@echo "SPLASH2_HOME=$(SPLASH2_HOME)"
+	@echo "GEM5_HOME=$(GEM5_HOME)"
+	@echo "INSTALL: make -f Makefile.splash2 install"
+	@echo "BUILD: in splash2; make build or make build-splash2 ISA=X86 or make build-splash2 ISA=ARM"
+	@echo "RUN: in splash2; make run-splash2 ISA=X86 GEM5_OPT="" CMD="FFT" OPT=\"-p1 -s\" OUT="12345""
+	@echo " or to make batch run, refer to Run-splash2.bat."
+
+install: install-splash2 install-m5threads install-makefile
+
+build:
+	@echo "BUILD: make build for both X86 and ARM"
+	make build-splash2 ISA=X86
+	make build-splash2 ISA=ARM
+
+clean:
+	make clean-splash2 ISA=ARM
+	make clean-splash2 ISA=X86
+
+
+install-splash2:
+	wget http://web.archive.org/web/20080528165352/http://www-flash.stanford.edu/apps/SPLASH/splash2.tar.gz
+	tar -xzvf splash2.tar.gz
+	cd splash2; wget http://www.capsl.udel.edu/splash/splash2-modified.patch.gz
+	cd splash2; gzip -d splash2-modified.patch.gz
+	cd splash2; patch -p1 < splash2-modified.patch
+	cd splash2/codes; mkdir bin; mkdir bin/X86; mkdir bin/ARM;
+	@echo "splash2 installed."
+
+install-m5threads:
+	cd splash2/codes; git clone https://github.com/gem5/m5threads
+	@echo "m5threads installed."
+
+install-makefile:
+	cd splash2/codes/m5threads; mv Makefile Makefile.org; \
+		cp ../../../Makefile.m5threads Makefile
+	cd splash2/codes;  echo "BASEDIR := `pwd`" >> Makefile.config; \
+		cat ../../Makefile.config.splash2 >> Makefile.config
+	cd splash2;  echo "SPLASH2_HOME := `pwd`" >> Makefile; \
+		cat ../Makefile.splash2 >> Makefile
+	cd splash2; cp ../Run-splash2.bat .
+	@echo "YOU should set GEM5_HOME in splash2/Makefile"
+
+uninstall-makefile:
+	cd splash2/codes/m5threads; rm Makefile
+	cd splash2/codes; rm Makefile.config
+	cd splash2; rm Makefile
+	@echo "Makefiles are uninstalled!"
+	
+	
+SOURCE_DIRS := codes/m5threads codes/kernels/fft codes/kernels/lu/contiguous_blocks/ codes/kernels/lu/non_contiguous_blocks/ codes/kernels/radix codes/kernels/cholesky codes/apps/fmm codes/apps/ocean/contiguous_partitions codes/apps/ocean/non_contiguous_partitions codes/apps/barnes codes/apps/raytrace 
+
+build-splash2:
+	@echo "BUILD: make build ISA=X86 or make build ISA=ARM"
+	@make clean ISA=$(ISA)
+	@for srcdir in $(SOURCE_DIRS); \
+	do				\
+		$(MAKE) -C $$srcdir  || exit; \
+	done
+	@echo "Done. Check Executables located in splash2/codes/bin/$(ISA)/*"
+
+clean-splash2: $(SOURCE_DIRS)
+	@echo "CLEAN: make clean ISA=X86 or make clean ISA=ARM"
+	@for srcdir in $(SOURCE_DIRS); \
+	do				\
+		$(MAKE) -C $$srcdir clean || exit; \
+	done
+	@rm -f codes/bin/$(ISA)/"*"
+	@echo "Done cleaning for ISA=$(ISA)."
+
+
+
+run-splash2: # see run-batch scripts 
+	@time $(GEM5_HOME)/build/$(ISA)/gem5-$(PROTOCOL).opt \
+		$(GEM5_OPT) \
+		--outdir=m5out-$(PROTOCOL)-$(OUT) \
+		--stats-file=stats.txt \
+		$(GEM5_HOME)/configs/example/se.py \
+		$(SE_OPT) \
+		--cmd="$(SPLASH2_HOME)/codes/bin/$(ISA)/$(APP_CMD)" \
+		--option="$(APP_OPT)" \
+		--output=m5out-$(PROTOCOL)-$(OUT)/stdout.txt\
+		--errout=m5out-$(PROTOCOL)-$(OUT)/stderr.txt
+	@echo "Done. Check m5out-$(OUT) for $(ISA), $(PROTOCOL), $(APP_CMD), $(APP_OPT)"
+	@echo ""
+	@echo ""
+
+run-splash2-script: # see run-batch scripts 
+	@time $(GEM5_HOME)/build/$(ISA)/gem5-$(PROTOCOL).opt \
+		$(GEM5_OPT) \
+		--outdir=m5out-$(PROTOCOL)-$(OUT) \
+		$(GEM5_HOME)/$(SCRIPT) \
+		$(SCRIPT_OPT) 
+	@echo "Done. Check m5out-$(OUT) for $(ISA), $(PROTOCOL), $(SCRIPT_OPT)"
+	@echo ""
+	@echo ""
+

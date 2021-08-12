@@ -1,0 +1,171 @@
+GEM5_HOME := /Home2/hssong/gem5-X-master
+DARKNET2_HOME := /Home2/hssong/darknet-mobilenet-v2
+
+ISA ?= X86
+PROTOCOL ?= MI_example
+
+all: help-install-darknet help-run-darknet2 help-build-darket help-experiment
+
+help-install-darknet:
+	@echo make install-darknet2 : install darknet-mobilenet-v2
+	@echo make install-darknet3 : install darknet-yolo3
+
+help-build-darknet:
+	@echo cd <DARKNET directory>; make; : build default darknet
+
+help-run-darknet2:
+	@echo make run-darknet2 : run a darknet2 example command in native mode (cat classification)
+	@echo make run-darknet2-all : run a darknet2 compiled with GPU/ CUDNN/OPENCV/OPENMP ON/OFF
+	@echo make run-darknet2-se : run a darknet2(0000) example command in GEM5 SE mode
+
+install-darknet2:
+	git clone https://github.com/WePCf/darknet-mobilenet-v2
+	cd darknet-mobilenet-v2; pwd
+
+install-darknet3:
+	git clone https://github.com/pjreddie/darknet
+	mv darknet darknet3
+	cd darknet3; wget https://pjreddie.com/media/files/yolov3.weights; \
+		     wget http://pjreddie.com/media/files/yolov3-tiny.weights 
+	
+
+run-darknet2:
+	$(eval DARKNET2 ?= darknet)
+	@echo DARKNET2=$(DARKNET2)
+	@cd $(DARKNET2_HOME); time ./$(DARKNET2) classifier predict \
+				mobilenet/imagenet1k.data \
+				mobilenet/test.cfg 	\
+				mobilenet/test.weights 	\
+				mobilenet/cat2.jpg mobilenet/cat.jpg 
+	@echo Done! DARKNET2=$(DARKNET2) 
+	@echo ""
+
+# Compiled executable for GPU CUDNN OPENCV OPENMP - ON:1 OFF:0 (Precompiled)
+DARKNETS = darknet0000 darknet0001 darknet1001 darknet1100
+run-darknet2-all:
+	for darkn in $(DARKNETS); 	\
+	do				\
+		echo DARKNET2=$$darkn; \
+		make -f Makefile.run.darknet run-darknet2 DARKNET2=$$darkn; \
+	done
+
+# YOU CAN change NCPU, TOPOLOGY, PROTOCOL) - CrossbarGarnet
+help-run-exp1:
+	@echo RUN EXP1: make -f Makefile.run.darknet run-darknet2-se-exp1
+	@echo     which run experiment1 for: CPUS and TOPOLOGY(See the target)
+
+run-darknet2-se-exp1: 
+	make -f Makefile.run.darknet run-darknet2-se-xbar TC=01 NCPU=1 
+	make -f Makefile.run.darknet run-darknet2-se-xbar TC=04 NCPU=4 
+
+run-darknet2-se-xbar:
+	$(eval NCPU ?= 4)
+	$(eval TC ?= 00)
+	$(eval TOPO ?= CrossbarGarnet)
+	$(eval PROTO ?= MOESI_hammer)
+	$(eval DARKNET2 ?= darknet)
+	$(eval OUT ?= m5out-$(PROTO)-$(TOPO)-TC$(TC))
+	@echo "DO : Simulation for $(OUT): NCPU=$(NCPU) TOPO=$(TOPO)"
+	@time make -f Makefile.run.darknet run-gem5-script \
+		OUT=$(OUT)				\
+		PROTOCOL=$(PROTO) 			\
+		SCRIPT=configs/example/se.py 		\
+		SCRIPT_OPT=" 				\
+			--cpu-type=AtomicSimpleCPU	\
+			--caches			\
+			--l1d_size=64kB --l1i_size=64kB \
+			--mem-size=4GB			\
+			--output=$(OUT)/stdout.txt	\
+			--errout=$(OUT)/stderr.txt 	\
+			--num-cpu=$(NCPU) 		\
+			--ruby				\
+			--network=garnet2.0		\
+			--topology=CrossbarGarnet	\
+			--cmd=$(DARKNET2_HOME)/$(DARKNET2) \
+			--option='classifier predict 	\
+				mobilenet/imagenet1k.data \
+				mobilenet/test.cfg 	\
+				mobilenet/test.weights 	\
+				mobilenet/cat.jpg'	\
+			" || exit;
+	@echo "DONE! : Simulation for $(OUT): NCPU=$(NCPU) TOPO=$(TOPO)"
+	@echo "Checkout $(OUT) for more statistics"
+	@echo ""
+
+run-darknet2-se-mesh:
+	$(eval TOPO ?= Mesh_XY)
+	$(eval NCPU ?= 1)
+	$(eval NROW ?= 1)
+	$(eval TC ?= 01)
+	$(eval PROTO ?= MOESI_hammer)
+	$(eval DARKNET2 ?= darknet)
+	$(eval OUT = m5out-$(PROTO)-$(TOPO)-TC$(TC))
+	@echo DO : Simulation for $(OUT): NCPU=$(NCPU) TOPO=$(TOPO)
+	time make -f Makefile.run.darknet run-gem5-script \
+		OUT=$(OUT)				\
+		PROTOCOL=$(PROTO) 			\
+		SCRIPT=configs/example/se.py 		\
+		SCRIPT_OPT=" 				\
+			--cpu-type=AtomicSimpleCPU	\
+			--caches			\
+			--l1d_size=64kB --l1i_size=64kB \
+			--mem-size=8192MB		\
+			--num-cpu=$(NCPU) 		\
+			--num-dirs=$(NCPU) 		\
+			--output=$(OUT)/stdout.txt	\
+			--errout=$(OUT)/stderr.txt 	\
+			--cmd=$(DARKNET2_HOME)/$(DARKNET2) \
+			--option='classifier predict 	\
+				mobilenet/imagenet1k.data \
+				mobilenet/test.cfg 	\
+				mobilenet/test.weights 	\
+				mobilenet/cat.jpg'	\
+			--ruby				\
+			--network=garnet2.0		\
+			--topology=$(TOPO)		\
+			--mesh-rows=$(NROW)		\
+			" || exit;
+	@echo "DONE! : Simulation for $(OUT): NCPU=$(NCPU) TOPO=$(TOPO)"
+	@echo "Checkout $(OUT) for more statistics"
+	@echo ""
+	
+#" >> $(OUT)/term.txt || exit;
+# INDEX: output performace index in stats.txt from M5OUT dire to TARGET file.
+# find keyworkd INDEX and sum all items
+extract-sum:
+	@echo "Eextracting $(INDEX) from $(M5OUT) to $(TARGET)"
+	@grep '$(INDEX)' $(M5OUT)/stats.txt  \
+		| awk -F'#' '{print $$1}' | sed '/nan/d' \
+		| awk '{sum += $$2} END {printf sum}' \
+		>> $(TARGET)
+	
+# INDEX: output performace index in stats.txt from M5OUT dire to TARGET file.
+# find keyworkd INDEX and average all items
+extract-avg:
+	@echo "Eextracting $(INDEX) from $(M5OUT) to $(TARGET)"
+	@grep '$(INDEX)' $(M5OUT)/stats.txt  \
+		| awk -F'#' '{print $$1}' | sed '/nan/d' \
+		| awk '{sum += $$2} END {printf sum/NF}' \
+		>> $(TARGET)
+	
+# Automatically build gem5.opt with various PROTOCOL
+$(GEM5_HOME)/build/$(ISA)/gem5-$(PROTOCOL).opt: 
+	@echo Building $(GEM5_HOME)\build\$(ISA)\gem5-$(PROTOCOL).opt ...
+	@cd $(GEM5_HOME); \
+		scons PROTOCOL=$(PROTOCOL) RUBY=TRUE build/X86/gem5.opt; \
+		cd build/X86/; cp gem5.opt gem5-$(PROTOCOL).opt; \
+		ls -l gem5-$(PROTOCOL).opt;
+
+# run gem5 script
+run-gem5-script: $(GEM5_HOME)/build/$(ISA)/gem5-$(PROTOCOL).opt
+	@echo "GEM5 Simulation start for ISA=$(ISA) OUT=$(OUT) SCRIPT=$(SCRIPT) SCRIPT_OPT=$(SCRIPT_OPT)"
+	@time $(GEM5_HOME)/build/$(ISA)/gem5-$(PROTOCOL).opt \
+		$(GEM5_OPT) \
+		--outdir=$(OUT) \
+		$(GEM5_HOME)/$(SCRIPT) \
+		$(SCRIPT_OPT) 
+
+	@echo "Simulation Done. Check $(OUT)"
+	@echo ""
+	@echo ""
+

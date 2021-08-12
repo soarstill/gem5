@@ -1,0 +1,218 @@
+SPLASH2_HOME := /Home2/hssong/tmp/splash2
+GEM5_HOME := /Home2/hssong/gem5-X-master
+
+#MAKEFLAGS := $(MAKEFLAGS) -no-print-directory
+
+ifndef ISA
+ISA ?= X86
+endif
+
+ifndef PROTOCOL
+PROTOCOL := MI_example
+endif
+
+ifndef NCPU
+NCPU := 4
+endif
+
+all: help-run-splash2
+
+
+#------------ BEGIN TABLE 1 ----------------------------------------------------------------
+help-run-splash2:
+	@echo "RUN: make run-table1, ruby-random-tests, creates many m5out-TOPO-CPU-DSIZE"
+	@echo "ANALYZE: make analyze-table1, creates table1A.txt"
+	@echo "RUN: make run-table5, run FFT SE mode"
+	@echo "ANALYZE: make analyze-table5, analyze results for FFT SE mode" 
+	@echo "RUN: make run-table6, run RADIX SE mode"
+	@echo "ANALYZE: make analyze-table6, analyze results for RADIX SE mode" 
+
+# INPUT for Experiment TABLE1A
+IN_NOC := Crossbar Mesh_XY
+IN_NCPUS := 16 32 64
+IN_L1DSIZES := 256B 1024B
+TARGET_TABLE1 = table1A.txt
+
+run-table1:
+	@echo "Run simulation for Table 1A"
+	@echo "IN_TOPOLOGY = $(IN_NOC)"
+	@echo "IN_NCPUs = $(IN_NCPUS)"
+	@echo "IN_L1DSIZEs = $(IN_L1DSIZES)"
+
+	@for noc in $(IN_NOC) ; \
+	do				\
+		for ncpu in $(IN_NCPUS); 	\
+		do				\
+			for dsize in $(IN_L1DSIZES); 	\
+			do				\
+		  		echo "Simulating $$noc $$ncpu $$dsize"; \
+				make -f Makefile.run.splash2 run-gem5-script \
+					PROTOCOL=MI_example \
+					OUT="$$noc-$$ncpu-$$dsize" \
+					SCRIPT=configs/example/ruby_random_test.py \
+					SCRIPT_OPT="--num-cpu=$$ncpu \
+						--caches --l1d_size=$$dsize \
+						--topology=$$noc \
+						--mesh-rows=4 --num-dir=$$ncpu \
+					" || exit; \
+		  	done \
+		done \
+	done
+	@echo "Done simulation for Table1A. See m5out-MI_example-*-*-*/stats.txt"
+
+
+
+analyze-table1: run-table1
+	@echo "Analyzing stats for Table 1A"
+	@rm -f $(TARGET_TABLE1)
+	@echo "Table1A : performance of ruby_random_test with topology, cpu, L1Dsize" >> $(TARGET_TABLE1)
+	@echo "---------------------------------------------------------------------" >> $(TARGET_TABLE1)
+	@echo "INPUT-INDEX,  readReqs,  writeReqs,  avgQLat,  busUtil, avgMemAccLat" >> $(TARGET_TABLE1)
+	@echo "---------------------------------------------------------------------" >> $(TARGET_TABLE1)
+	@for noc in $(IN_NOC); \
+	do				\
+		for ncpu in $(IN_NCPUS); 	\
+		do				\
+			for dsize in $(IN_L1DSIZES); 	\
+			do				\
+		  		echo -n "$$noc/$$ncpu/$$dsize,\t" \
+					>> $(TARGET_TABLE1);\
+				make -f Makefile.run.splash2 analyze-table1-case \
+					M5OUT=m5out-MI_example-$$noc-$$ncpu-$$dsize \
+					TARGET_TBL=$(TARGET_TABLE1) \
+					|| exit; \
+		  	done \
+		done \
+	done
+	@cat $(TARGET_TABLE1)
+	@echo "Done stats for Table 1A. See $(TARGET_TABLE1) and m5out-MI_example-*-*-*"
+
+analyze-table1-case: # M5OUT, TARGET
+	@make -f Makefile.run.splash2 extract-sum \
+		M5OUT=$(M5OUT) INDEX="readReqs " TARGET=$(TARGET_TBL); \
+		echo -n ",\t" >> $(TARGET_TBL)
+	@make -f Makefile.run.splash2 extract-sum \
+		M5OUT=$(M5OUT) INDEX="writeReqs " TARGET=$(TARGET_TBL); \
+		echo -n ",\t" >> $(TARGET_TBL)
+	@make -f Makefile.run.splash2 extract-sum \
+		M5OUT=$(M5OUT) INDEX="avgQLat " TARGET=$(TARGET_TBL); \
+		echo -n ",\t" >> $(TARGET_TBL)
+	@make -f Makefile.run.splash2 extract-avg \
+		M5OUT=$(M5OUT) INDEX="busUtil " TARGET=$(TARGET_TBL); \
+		echo -n ",\t" >> $(TARGET_TBL)
+	@make -f Makefile.run.splash2 extract-avg \
+		M5OUT=$(M5OUT) INDEX="avgMemAccLat " TARGET=$(TARGET_TBL); \
+		echo "" >> $(TARGET_TBL)
+
+
+#------------- BEGIN RUNNING SPLASH2 BENCHMARK --------------------------------------------------
+# APP_CMD: BARNES  CHOLESKY  FFT  FMM  LU  OCEAN  RADIX  RAYTRACE
+# PROTOCOL: MI_example MOESI_CMP_directory MOESI_hammer MESI_Two_Level 
+#		MESI_Three_Level Garnet_standalone
+# example: make run-splash2 OUT=10004 ISA="X86" PROTOCOL=MOESI_hammer APP_CMD=FFT APP_OPT="-p4 -s" SE_OPT="--num-cpu=16 --num-dir=16 --cpu-type=TimingSimpleCPU --caches --l1d_size=64kB --l1i_size=16kB "
+
+TARGET5 := FFT-01
+TARGET_TABLE5:=table5.txt
+TABLE5_M5OUT:=  m5out-MI_example-$(TARGET5)
+
+run-table5:
+	echo "Simulation for $(TARGET5)"
+	make -f Makefile.run.splash2 run-gem5-script OUT="$(TARGET5)" \
+		PROTOCOL=MI_example \
+		SCRIPT=configs/example/se.py \
+		SCRIPT_OPT=" \
+		--cmd=$(SPLASH2_HOME)/codes/bin/$(ISA)/FFT \
+		--option='-p4 -s' \
+		--num-cpu=4 \
+		--caches --l1d_size=64kB --l1i_size=32kB \
+		--output=m5out-MI_example-$(TARGET5)/stdout.txt \
+		--errout=m5out-MI_example-$(TARGET5)/stderr.txt \
+		" || exit; 
+	@cat m5out-MI_example-$(TARGET5)/stdout.txt 
+	@echo "Checkout m5out-MI_example-$(TARGET5) for more statistics"
+	@echo ""
+
+analyze-table5: run-table5
+	@echo 'Analyzing stats for Table 5 - $(TARGET_TABLE5)'
+	@rm -rf $(TARGET_TABLE5)
+	@echo Table6 : FFT on SE.PY MI_example, X86, 4CPU >> $(TARGET_TABLE5)
+	@echo "------------------------------------------------------------" >> $(TARGET_TABLE5)
+	@echo Simulation INDEX             Data Cache-miss-rate  Inst. Cache-miss-rate >> $(TARGET_TABLE5)
+	@echo "------------------------------------------------------------" >> $(TARGET_TABLE5)
+	@echo -n "FFT/4CPU/MI_example\t" >> $(TARGET_TABLE5)
+	@make -f Makefile.run.splash2 extract-sum \
+		M5OUT=$(TABLE5_M5OUT) INDEX="dcache.overall_miss_rate" TARGET=$(TARGET_TABLE5); \
+		echo -n ",\t" >> $(TARGET_TABLE5)
+	@make -f Makefile.run.splash2 extract-avg \
+		M5OUT=$(TABLE5_M5OUT) INDEX="icache.overall_miss_rate" TARGET=$(TARGET_TABLE5); \
+		echo "" >> $(TARGET_TABLE5)
+	@cat m5out-MI_example-$(TARGET5)/stdout.txt 
+	@cat $(TARGET_TABLE5)
+	
+
+TARGET6 := RADIX-001
+TARGET_TABLE6:=table6.txt
+TABLE6_M5OUT:=  m5out-MI_example-$(TARGET6)
+
+run-table6:
+	echo "Simulation for $(TARGET6)"
+	make -f Makefile.run.splash2 run-gem5-script OUT="$(TARGET6)" \
+		PROTOCOL=MI_example \
+		SCRIPT=configs/example/se.py \
+		SCRIPT_OPT=" \
+		--cmd=$(SPLASH2_HOME)/codes/bin/$(ISA)/RADIX \
+		--option='-p4 -s -n2048' \
+		--num-cpu=4 \
+		--caches --l1d_size=64kB --l1i_size=32kB \
+		--output=m5out-MI_example-$(TARGET6)/stdout.txt \
+		--errout=m5out-MI_example-$(TARGET6)/stderr.txt \
+		" || exit; 
+	@cat m5out-MI_example-$(TARGET6)/stdout.txt 
+	@echo "Checkout m5out-MI_example-$(TARGET6) for more statistics"
+	@echo ""
+
+analyze-table6: run-table6
+	@echo 'Analyzing stats for Table 6 - $(TARGET_TABLE6)'
+	@rm -rf $(TARGET_TABLE6)
+	@echo Table6-stats : Stats RADIX on SE.PY MI_example, X86, 4CPU >> $(TARGET_TABLE6)
+	@echo "------------------------------------------------------------" >> $(TARGET_TABLE6)
+	@echo "Simulation INDEX   |   Data Cache-miss-rate  | Inst. Cache-miss-rate" >> $(TARGET_TABLE6)
+	@echo "------------------------------------------------------------" >> $(TARGET_TABLE6)
+	echo -n "RADIX/4CPU/X86/MI_example\t" >> $(TARGET_TABLE6)
+	make -f Makefile.run.splash2 extract-sum \
+		M5OUT=$(TABLE6_M5OUT) INDEX="dcache.overall_miss_rate" TARGET=$(TARGET_TABLE6); \
+		echo -n ",\t" >> $(TARGET_TABLE6)
+	@make -f Makefile.run.splash2 extract-avg \
+		M5OUT=$(TABLE6_M5OUT) INDEX="icache.overall_miss_rate" TARGET=$(TARGET_TABLE6); \
+		echo "" >> $(TARGET_TABLE6)
+	@cat m5out-MI_example-$(TARGET6)/stdout.txt 
+	@cat $(TARGET_TABLE6)
+
+#-------------  COMMON TARGET --------------------------------------------------
+
+extract-sum:
+	@echo "Eextracting $(INDEX) from $(M5OUT) to $(TARGET)"
+	@grep '$(INDEX)' $(M5OUT)/stats.txt  \
+		| awk -F'#' '{print $$1}' | sed '/nan/d' \
+		| awk '{sum += $$2} END {printf sum}' \
+		>> $(TARGET)
+	
+extract-avg:
+	@echo "Eextracting $(INDEX) from $(M5OUT) to $(TARGET)"
+	@grep '$(INDEX)' $(M5OUT)/stats.txt  \
+		| awk -F'#' '{print $$1}' | sed '/nan/d' \
+		| awk '{sum += $$2} END {printf sum/NF}' \
+		>> $(TARGET)
+	
+run-gem5-script: # OUT, ISA, PROTOCOL, SCRIPT, SCRIPT_OPT
+	@echo "Simulation Start for ISA=$(ISA) OUT=$(OUT) SCRIPT=$(SCRIPT) SCRIPT_OPT=$(SCRIPT_OPT)"
+	@time $(GEM5_HOME)/build/$(ISA)/gem5-$(PROTOCOL).opt \
+		$(GEM5_OPT) \
+		--outdir=m5out-$(PROTOCOL)-$(OUT) \
+		$(GEM5_HOME)/$(SCRIPT) \
+		$(SCRIPT_OPT) 
+
+	@echo "Simulation Done. Check m5out-$(OUT)"
+	@echo ""
+	@echo ""
+

@@ -1,0 +1,39 @@
+
+ifndef ISA
+$(warning "Environment var ISA is not set: ISA=ARM or ISA=X86")
+ISA := X86
+$(warning "Default ISA: ISA=$(ISA)")
+endif
+
+ifdef ISA
+ifeq ($(ISA),X86)
+CROSS_COMPILE :=
+CFLAGS_X86 :=
+CFLAGS := $(CFLAGS_X86)
+endif
+
+ifeq ($(ISA), ARM)
+CROSS_COMPILE := arm-linux-gnueabihf-
+CFLAGS_ARM :=  -march=armv7-a -marm
+CFLAGS := $(CFLAGS_ARM)
+endif
+endif
+
+CC := $(CROSS_COMPILE)gcc
+CPP := $(CROSS_COMPILE)g++
+CFLAGS := $(CFLAGS) -O3 -static
+ARFLAGS := rvU
+
+$(warning "CC=$(CC)")
+$(warning "CFLAGS=$(CFLAGS)")
+$(warning "LDFLAGS=$(LDFLAGS)")
+
+
+.PHONY: all clean
+
+all:  libpthread.a(pthread.o)
+	cp libpthread.a libpthread.$(ISA).a
+
+clean:
+	$(RM) *.o libpthread.a libpthread.$(ISA).a
+

@@ -1,0 +1,45 @@
+CC = gcc
+ARM_CC = arm-linux-gnueabi-gcc
+CFLAGS = -O2
+ARM_CFLAGS = -DSTREAM_TYPE=float
+
+FF = g77
+FFLAGS = -O2
+
+all:
+	@echo "call: Compile all"
+	@echo "c:    Run Single core C"
+	@echo "omp:  Run Multi core C using OpenMP"
+
+# call: stream_f.exe stream_c.exe stream_c_arm.exe stream_omp.exe
+call: stream_c.exe stream_c_arm.exe stream_omp.exe
+
+c: stream_c.exe
+	time ./stream_c.exe
+
+omp: stream_omp.exe
+	time ./stream_omp.exe
+
+stream_f.exe: stream.f mysecond.o
+	$(CC) $(CFLAGS) -c mysecond.c
+	$(FF) $(FFLAGS) -c stream.f
+	$(FF) $(FFLAGS) stream.o mysecond.o -o stream_f.exe
+
+stream_c.exe: stream.c
+	$(CC) $(CFLAGS) stream.c -o stream_c.exe
+
+stream_omp.exe: stream.c
+	$(CC) $(CFLAGS) -fopenmp -o stream_omp.exe stream.c
+
+stream_c_arm.exe: stream.c
+	$(ARM_CC) $(CFLAGS) $(ARM_CFLAGS) stream.c -o stream_c_arm.exe
+
+stream_c_arm_omp.exe: stream.c
+	$(ARM_CC) $(CFLAGS) $(ARM_CFLAGS) -fopenmp stream.c -o stream_c_arm_omp.exe
+
+clean:
+	rm -f stream_f.exe stream_c.exe stream_omp.exe stream_c_arm.exe stream_c_arm_omp.exe *.o
+
+# an example of a more complex build line for the Intel icc compiler
+stream.icc: stream.c
+	icc -O3 -xCORE-AVX2 -ffreestanding -qopenmp -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 stream.c -o stream.omp.AVX2.80M.20x.icc
